@@ -45,7 +45,7 @@ itertools = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-http = "1.4.2"
+http = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

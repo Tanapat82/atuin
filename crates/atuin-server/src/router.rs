@@ -1,5 +1,5 @@
-use atuin_domain::caps::CapServer;
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
+use atuin_domain::caps::CapServer;
 use axum::{
     Router,
     extract::{FromRef, FromRequestParts, Request},
@@ -114,20 +114,9 @@ impl<DB: Database> FromRef<AppState<DB>> for CapServer {
     }
 }
 
-/// The capability set the self-hosted server advertises: empty. Absence of
-/// `sh.atuin.server/records.bundle` is how clients learn packfile bundling is unsupported.
-pub(crate) fn server_caps() -> CapServer {
-    CapServer::builder().build()
-}
-
 pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
-    let caps = server_caps();
+    let caps = CapServer::builder().build();
 
-    // Everything except the health check negotiates capabilities: a capability-aware client that
-    // presents a stale token gets a 412 so it refreshes before we act on its request. Clients that
-    // send no `X-Atuin-Capabilities-Known` header -- browsers, monitors, pre-capabilities clients --
-    // pass straight through, so negotiation only ever affects atuin clients whose view of the
-    // server is out of date.
     let negotiated = Router::new()
         .route("/", get(handlers::index))
         .route("/user/{username}", get(handlers::user::get))
@@ -145,10 +134,6 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
             handlers::v0::capabilities::negotiate,
         ));
 
-    // Two routes never negotiate, for different reasons. The capabilities endpoint must stay
-    // ungated so a client with a stale token can always refresh here without a 412; the health
-    // check must always answer for load balancers and monitors, independent of any capability
-    // state.
     let unnegotiated = Router::new()
         .route("/api/v0/capabilities", get(handlers::v0::capabilities::get))
         .route("/healthz", get(handlers::health::health_check));
