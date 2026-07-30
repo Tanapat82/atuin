@@ -1,5 +1,5 @@
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
-use atuin_domain::caps::{CapabilitiesCap, CapServer};
+use atuin_domain::caps::{CapServer, CapabilitiesCap};
 use axum::{
     Router,
     extract::{FromRequestParts, Request},
