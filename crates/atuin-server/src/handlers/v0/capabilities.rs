@@ -61,15 +61,18 @@ mod tests {
         http::{Request, StatusCode},
         routing::get as axum_get,
     };
+    use rstest::{fixture, rstest};
     use tower::ServiceExt; // oneshot
 
+    /// An empty capability set -- advertises nothing, but still issues a stable token.
+    #[fixture]
     fn caps() -> CapServer {
         CapServer::builder().build()
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn endpoint_serves_the_document() {
-        let caps = caps();
+    async fn endpoint_serves_the_document(caps: CapServer) {
         let app: Router = Router::new()
             .route("/api/v0/capabilities", axum_get(get))
             .with_state(caps.clone());
@@ -101,9 +104,10 @@ mod tests {
             .layer(axum::middleware::from_fn_with_state(caps, negotiate))
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn absent_known_header_passes() {
-        let resp = negotiating_app(caps())
+    async fn absent_known_header_passes(caps: CapServer) {
+        let resp = negotiating_app(caps)
             .oneshot(
                 Request::builder()
                     .uri("/probe")
@@ -115,9 +119,9 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn matching_token_passes() {
-        let caps = caps();
+    async fn matching_token_passes(caps: CapServer) {
         let resp = negotiating_app(caps.clone())
             .oneshot(
                 Request::builder()
@@ -131,12 +135,13 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn non_utf8_known_header_is_treated_as_absent_and_passes() {
+    async fn non_utf8_known_header_is_treated_as_absent_and_passes(caps: CapServer) {
         // `to_str().ok()` turns invalid UTF-8 into `None`, i.e. "no token known" -- not a 412,
         // and not a panic.
         let value = HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap();
-        let resp = negotiating_app(caps())
+        let resp = negotiating_app(caps)
             .oneshot(
                 Request::builder()
                     .uri("/probe")
@@ -149,9 +154,9 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn stale_token_rejects_with_available_header() {
-        let caps = caps();
+    async fn stale_token_rejects_with_available_header(caps: CapServer) {
         let resp = negotiating_app(caps.clone())
             .oneshot(
                 Request::builder()
