@@ -16,7 +16,7 @@ use crate::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
 
 /// Reqwest middleware that negotiates capability versions with the server.
 ///
-/// Stamps [`CapClient::known_token`] onto each request as `X-Atuin-Capabilities-Known`. When the
+/// Stamps `CapClient::known_token` onto each request as `X-Atuin-Capabilities-Known`. When the
 /// server answers `412` with a differing `X-Atuin-Capabilities-Available`, it refreshes
 /// capabilities over its own plain [`reqwest::Client`] (concurrent refreshes coalesce) and, when
 /// built with `refresh(true)`, retries the original request once with the fresh token.

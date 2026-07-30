@@ -31,7 +31,7 @@
 //!
 //! The client side is implemented as reqwest middleware in [`client::CapClient`].
 //! The server side is implemented as a plain struct that can be embedded in any server, in
-//! [`client::CapServer`].
+//! `client::CapServer`.
 
 use parking_lot::RwLock;
 use std::{any::Any, borrow::Borrow, collections::HashMap, fmt};
