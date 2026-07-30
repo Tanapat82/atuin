@@ -143,6 +143,7 @@ impl CapClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::caps::{CapServer, CapabilitiesCap};
     use rstest::{fixture, rstest};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -180,5 +181,39 @@ mod tests {
 
         // The token is the server's version, opaque and echoed verbatim.
         assert_eq!(client.known_token(), Some("7".to_string()));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn client_observes_the_capability_the_server_advertises(http_client: reqwest::Client) {
+        // Serve the exact wire body a real server would produce for the capabilities capability.
+        let advertised = CapServer::builder()
+            .can(CapabilitiesCap { version: 1 })
+            .build();
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v0/capabilities"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(advertised.body().to_owned()))
+            .mount(&server)
+            .await;
+
+        let caps_url: Url = format!("{}/api/v0/capabilities", server.uri())
+            .parse()
+            .unwrap();
+        let client = CapClient::new(caps_url);
+
+        // Nothing fetched yet, so the capability cannot be observed.
+        assert!(matches!(
+            client.server_support::<CapabilitiesCap>(),
+            Err(ServerSupportError::NotFetched)
+        ));
+
+        client.refresh(&http_client).await.unwrap();
+
+        // Having refreshed, the client observes the capability the server advertised.
+        assert_eq!(
+            client.server_support::<CapabilitiesCap>().unwrap(),
+            Some(CapabilitiesCap { version: 1 })
+        );
     }
 }

@@ -113,7 +113,7 @@ impl CapServerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::caps::{CapabilitiesResponse, Capability};
+    use crate::caps::{CapabilitiesCap, CapabilitiesResponse, Capability};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +128,7 @@ mod tests {
     fn empty_server_advertises_nothing() {
         let caps = CapServer::builder().build();
         assert!(!caps.advertises("test/cap"));
-        assert!(!caps.advertises("sh.atuin.server/records.bundle"));
+        assert!(!caps.advertises(CapabilitiesCap::NAME));
     }
 
     #[test]

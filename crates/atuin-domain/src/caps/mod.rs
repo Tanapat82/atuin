@@ -25,9 +25,6 @@ pub use client::{CapClient, ServerSupportError};
 pub use middleware::{CapMiddleware, CapabilitiesExt};
 pub use server::{CapServer, CapServerBuilder, Negotiation};
 
-mod packfile;
-pub use packfile::PackfileCap;
-
 /// A capability is always indexed by a String key.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, derive_more::AsRef)]
 struct CapKey(String);
@@ -42,6 +39,23 @@ impl Borrow<str> for CapKey {
 pub trait Capability: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The name this capability is indexed by on the wire, eg `sh.atuin.server/records.batch`.
     const NAME: &'static str;
+}
+
+/// The capability-negotiation protocol itself, expressed as a capability.
+///
+/// A server that speaks capabilities advertises this, so a client can observe -- from the
+/// capability set alone -- that the protocol is supported, and at which version. It is
+/// deliberately self-referential: receiving any capability document already implies the server
+/// understands capabilities. Naming that fact gives the negotiation machinery a concrete
+/// capability to carry today, while the richer feature-specific ones live with their features.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapabilitiesCap {
+    /// The version of the capability-negotiation protocol the server implements.
+    pub version: u32,
+}
+
+impl Capability for CapabilitiesCap {
+    const NAME: &'static str = "sh.atuin.server/capabilities";
 }
 
 /// The capabilities a server advertises, as returned from its capabilities endpoint.

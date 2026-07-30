@@ -1,5 +1,5 @@
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
-use atuin_domain::caps::CapServer;
+use atuin_domain::caps::{CapabilitiesCap, CapServer};
 use axum::{
     Router,
     extract::{FromRequestParts, Request},
@@ -108,7 +108,11 @@ pub struct AppState<DB: Database> {
 }
 
 pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
-    let caps = CapServer::builder().build();
+    // Advertise the self-referential capabilities capability, so every server that speaks the
+    // protocol carries at least one concrete capability a client can observe.
+    let caps = CapServer::builder()
+        .can(CapabilitiesCap { version: 1 })
+        .build();
 
     let negotiated = Router::new()
         .route("/", get(handlers::index))
