@@ -9,9 +9,9 @@ use super::Capability;
 /// The result of comparing a client's echoed capability token against the server's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Negotiation {
-    /// The client's token matches, or was absent — serve the request.
+    /// The client's token matches, or was absent -- serve the request.
     Current,
-    /// The client presented a *differing* token — its cached capabilities are stale.
+    /// The client presented a *differing* token -- its cached capabilities are stale.
     Stale,
 }
 
@@ -19,7 +19,7 @@ pub enum Negotiation {
 ///
 /// Built once at startup via [`CapServer::builder`]. The version [`token`](Self::token) and the
 /// serialized [`body`](Self::body) document are computed then and never again, so the per-request
-/// hot path ([`negotiate`](Self::negotiate)) is a single string comparison — no hashing, no
+/// hot path ([`negotiate`](Self::negotiate)) is a single string comparison -- no hashing, no
 /// locking, no allocation. Cloning is an `Arc` bump.
 #[derive(Debug, Clone)]
 pub struct CapServer {

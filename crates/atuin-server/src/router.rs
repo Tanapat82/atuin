@@ -1,4 +1,4 @@
-use atuin_common::caps::CapServer;
+use atuin_domain::caps::CapServer;
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
 use axum::{
     Router,

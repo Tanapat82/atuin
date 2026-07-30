@@ -4,8 +4,8 @@
 //! `AppState`. In the real router the endpoint reaches the `CapServer` through
 //! `FromRef<AppState<DB>>`, and the middleware is given it directly via `from_fn_with_state`.
 
-use atuin_common::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
-use atuin_common::caps::{CapServer, Negotiation};
+use atuin_domain::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
+use atuin_domain::caps::{CapServer, Negotiation};
 use axum::{
     extract::{Request, State},
     http::{HeaderName, HeaderValue, StatusCode, header::CONTENT_TYPE},
@@ -13,7 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-/// `GET /api/v0/capabilities` — serve the pre-serialized capability document.
+/// `GET /api/v0/capabilities` -- serve the pre-serialized capability document.
 pub async fn get(State(caps): State<CapServer>) -> Response {
     (
         [(CONTENT_TYPE, HeaderValue::from_static("application/json"))],
@@ -53,8 +53,8 @@ pub async fn negotiate(State(caps): State<CapServer>, request: Request, next: Ne
 #[cfg(test)]
 mod tests {
     use super::*;
-    use atuin_common::caps::CapServer;
-    use atuin_common::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
+    use atuin_domain::caps::CapServer;
+    use atuin_domain::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
     use axum::{
         Router,
         body::Body,

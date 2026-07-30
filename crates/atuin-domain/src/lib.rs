@@ -67,3 +67,4 @@ macro_rules! new_uuid {
 pub mod api;
 pub mod caps;
 pub mod record;
+pub mod sync;

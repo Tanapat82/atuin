@@ -143,13 +143,21 @@ impl CapClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    #[tokio::test]
-    async fn known_token_reflects_the_last_refresh() {
-        crate::tls::ensure_crypto_provider();
+    /// A reqwest client with the process-default crypto provider installed -- needed before the
+    /// client is built.
+    #[fixture]
+    fn http_client() -> reqwest::Client {
+        atuin_common::tls::ensure_crypto_provider();
+        reqwest::Client::new()
+    }
 
+    #[rstest]
+    #[tokio::test]
+    async fn known_token_reflects_the_last_refresh(http_client: reqwest::Client) {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/v0/capabilities"))
@@ -168,7 +176,7 @@ mod tests {
         // Nothing fetched yet.
         assert_eq!(client.known_token(), None);
 
-        client.refresh(&reqwest::Client::new()).await.unwrap();
+        client.refresh(&http_client).await.unwrap();
 
         // The token is the server's version, opaque and echoed verbatim.
         assert_eq!(client.known_token(), Some("7".to_string()));

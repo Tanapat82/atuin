@@ -25,6 +25,9 @@ pub use client::{CapClient, ServerSupportError};
 pub use middleware::{CapMiddleware, CapabilitiesExt};
 pub use server::{CapServer, CapServerBuilder, Negotiation};
 
+mod packfile;
+pub use packfile::PackfileCap;
+
 /// A capability is always indexed by a String key.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, derive_more::AsRef)]
 struct CapKey(String);

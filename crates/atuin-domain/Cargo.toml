@@ -22,7 +22,19 @@ typed-builder = { workspace = true }
 derive_more = { workspace = true }
 eyre = { workspace = true }
 sqlx = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = "0.12.5"
+reqwest-middleware = "0.5"
+http = "1.4.2"
+xxhash-rust = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
+proptest = { workspace = true }
+wiremock = "0.6"

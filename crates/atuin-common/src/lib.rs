@@ -2,7 +2,6 @@
 
 #[cfg(feature = "ansi")]
 pub mod ansi;
-pub mod caps;
 pub mod docs;
 pub mod filter;
 pub mod logs;
@@ -10,7 +9,6 @@ pub mod path;
 pub mod shell;
 pub mod slice;
 pub mod string;
-pub mod sync;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 pub mod time;

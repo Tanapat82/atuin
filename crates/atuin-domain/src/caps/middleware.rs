@@ -100,12 +100,21 @@ impl CapabilitiesExt for Client {
 mod tests {
     use super::*;
     use crate::caps::CapClient;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    /// A reqwest client with the process-default crypto provider installed -- every network test
+    /// needs the provider in place before it builds a client.
+    #[fixture]
+    fn http_client() -> reqwest::Client {
+        atuin_common::tls::ensure_crypto_provider();
+        reqwest::Client::new()
+    }
+
     /// Mount a caps endpoint (returns version 5) plus a `/protected` route that 200s only when the
     /// client presents `x-atuin-capabilities-known: 5`, and otherwise 412s with the available token.
+    #[fixture]
     async fn negotiating_server() -> MockServer {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
@@ -146,19 +155,19 @@ mod tests {
     #[case(false, 412, 0)]
     #[tokio::test]
     async fn refresh_controls_whether_the_412_is_retried(
+        http_client: reqwest::Client,
+        #[future] negotiating_server: MockServer,
         #[case] refresh: bool,
         #[case] expected_status: u16,
         #[case] expected_caps_hits: usize,
     ) {
-        crate::tls::ensure_crypto_provider();
-        let server = negotiating_server().await;
-        let http = reqwest::Client::new();
+        let server = negotiating_server.await;
         let middleware = CapMiddleware::builder()
             .caps(cap_client(&server))
-            .http(http.clone())
+            .http(http_client.clone())
             .refresh(refresh)
             .build();
-        let client = ClientBuilder::new(http).with(middleware).build();
+        let client = ClientBuilder::new(http_client).with(middleware).build();
 
         let response = client
             .get(format!("{}/protected", server.uri()))
@@ -178,9 +187,9 @@ mod tests {
         assert_eq!(caps_hits, expected_caps_hits);
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn unrelated_4xx_is_not_touched() {
-        crate::tls::ensure_crypto_provider();
+    async fn unrelated_4xx_is_not_touched(http_client: reqwest::Client) {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/missing"))
@@ -191,13 +200,12 @@ mod tests {
             .parse()
             .unwrap();
 
-        let http = reqwest::Client::new();
         let middleware = CapMiddleware::builder()
             .caps(CapClient::new(caps_url))
-            .http(http.clone())
+            .http(http_client.clone())
             .refresh(true)
             .build();
-        let client = ClientBuilder::new(http).with(middleware).build();
+        let client = ClientBuilder::new(http_client).with(middleware).build();
 
         let response = client
             .get(format!("{}/missing", server.uri()))
@@ -216,9 +224,9 @@ mod tests {
         assert_eq!(caps_hits, 0, "a plain 404 must not trigger a refresh");
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn bare_412_without_caps_header_passes_through() {
-        crate::tls::ensure_crypto_provider();
+    async fn bare_412_without_caps_header_passes_through(http_client: reqwest::Client) {
         // A 412 that carries no `X-Atuin-Capabilities-Available` header is an ordinary precondition
         // failure, not a capability signal -- the middleware must pass it through and never refresh.
         let server = MockServer::start().await;
@@ -231,13 +239,12 @@ mod tests {
             .parse()
             .unwrap();
 
-        let http = reqwest::Client::new();
         let middleware = CapMiddleware::builder()
             .caps(CapClient::new(caps_url))
-            .http(http.clone())
+            .http(http_client.clone())
             .refresh(true)
             .build();
-        let client = ClientBuilder::new(http).with(middleware).build();
+        let client = ClientBuilder::new(http_client).with(middleware).build();
 
         let response = client
             .get(format!("{}/precondition", server.uri()))
@@ -259,11 +266,14 @@ mod tests {
         );
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn ext_trait_builds_a_negotiating_client() {
-        crate::tls::ensure_crypto_provider();
-        let server = negotiating_server().await;
-        let client = reqwest::Client::new().with_capabilities(cap_client(&server), true);
+    async fn ext_trait_builds_a_negotiating_client(
+        http_client: reqwest::Client,
+        #[future] negotiating_server: MockServer,
+    ) {
+        let server = negotiating_server.await;
+        let client = http_client.with_capabilities(cap_client(&server), true);
 
         let response = client
             .get(format!("{}/protected", server.uri()))
@@ -275,11 +285,14 @@ mod tests {
         assert_eq!(response.text().await.unwrap(), "ok");
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn concurrent_burst_fetches_capabilities_once() {
-        crate::tls::ensure_crypto_provider();
-        let server = negotiating_server().await;
-        let client = reqwest::Client::new().with_capabilities(cap_client(&server), true);
+    async fn concurrent_burst_fetches_capabilities_once(
+        http_client: reqwest::Client,
+        #[future] negotiating_server: MockServer,
+    ) {
+        let server = negotiating_server.await;
+        let client = http_client.with_capabilities(cap_client(&server), true);
 
         let mut handles = Vec::new();
         for _ in 0..20 {

@@ -407,7 +407,6 @@ dependencies = [
 name = "atuin-common"
 version = "18.19.0-beta.2"
 dependencies = [
- "async-trait",
  "base64",
  "derive_more",
  "directories",
@@ -415,11 +414,9 @@ dependencies = [
  "getrandom 0.4.3",
  "http",
  "itertools",
- "parking_lot",
  "pretty_assertions",
  "proptest",
  "reqwest",
- "reqwest-middleware",
  "rstest",
  "serde",
  "serde_json",
@@ -430,14 +427,12 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "typed-builder",
  "unicode-segmentation",
  "unicode-width 0.2.2",
  "url",
  "uuid",
  "vt100",
  "wiremock",
- "xxhash-rust",
 ]
 
 [[package]]
@@ -480,17 +475,29 @@ dependencies = [
 name = "atuin-domain"
 version = "18.19.0-beta.2"
 dependencies = [
+ "async-trait",
  "atuin-common",
  "derive_more",
  "eyre",
+ "http",
+ "parking_lot",
  "pretty_assertions",
+ "proptest",
+ "reqwest",
+ "reqwest-middleware",
  "rstest",
  "semver",
  "serde",
+ "serde_json",
  "sqlx",
+ "thiserror 2.0.18",
  "time",
+ "tokio",
  "typed-builder",
+ "url",
  "uuid",
+ "wiremock",
+ "xxhash-rust",
 ]
 
 [[package]]

@@ -45,12 +45,7 @@ itertools = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
-async-trait = { workspace = true }
-parking_lot = "0.12.5"
-reqwest-middleware = "0.5"
 http = "1.4.2"
-typed-builder = { workspace = true }
-xxhash-rust = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
