@@ -16,11 +16,6 @@ pub enum Negotiation {
 }
 
 /// Immutable, cheaply-cloneable set of capabilities a server advertises.
-///
-/// Built once at startup via [`CapServer::builder`]. The version [`token`](Self::token) and the
-/// serialized [`body`](Self::body) document are computed then and never again, so the per-request
-/// hot path ([`negotiate`](Self::negotiate)) is a single string comparison -- no hashing, no
-/// locking, no allocation. Cloning is an `Arc` bump.
 #[derive(Debug, Clone)]
 pub struct CapServer {
     inner: Arc<Inner>,
