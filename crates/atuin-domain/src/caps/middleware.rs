@@ -4,6 +4,8 @@
 //! server rejects with `412` plus a differing available token, refreshes capabilities (and, if so
 //! configured, retries the request once).
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use http::Extensions;
 use reqwest::header::{HeaderName, HeaderValue};
@@ -23,7 +25,7 @@ use crate::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
 #[derive(Debug, Clone, TypedBuilder)]
 pub struct CapMiddleware {
     /// Source of the known token and the `/api/v0/capabilities` refresh.
-    caps: CapClient,
+    caps: Arc<CapClient>,
     /// Client used to request the capabilities from the server.
     http: Client,
     /// Whether to retry the original request once after a successful refresh.
@@ -82,11 +84,11 @@ impl Middleware for CapMiddleware {
 /// Install capability negotiation onto a [`reqwest::Client`].
 pub trait CapabilitiesExt {
     /// Wrap this client so it negotiates capabilities.
-    fn with_capabilities(self, caps: CapClient, refresh: bool) -> ClientWithMiddleware;
+    fn with_capabilities(self, caps: Arc<CapClient>, refresh: bool) -> ClientWithMiddleware;
 }
 
 impl CapabilitiesExt for Client {
-    fn with_capabilities(self, caps: CapClient, refresh: bool) -> ClientWithMiddleware {
+    fn with_capabilities(self, caps: Arc<CapClient>, refresh: bool) -> ClientWithMiddleware {
         let middleware = CapMiddleware::builder()
             .caps(caps)
             .http(self.clone())
@@ -143,7 +145,7 @@ mod tests {
         server
     }
 
-    fn cap_client(server: &MockServer) -> CapClient {
+    fn cap_client(server: &MockServer) -> Arc<CapClient> {
         let caps_url = format!("{}/api/v0/capabilities", server.uri())
             .parse()
             .unwrap();

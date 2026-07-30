@@ -11,14 +11,9 @@ use atuin_common::sync::CoalescingCell;
 /// The server's capabilities are populated by [`CapClient::refresh`], which the crate drives at
 /// negotiation time; [`CapClient::server_support`] is then a pure, offline read of that cache.
 ///
-/// Cloning is cheap.
-#[derive(Debug, Clone)]
-pub struct CapClient {
-    inner: Arc<CapClientInner>,
-}
-
+/// Thread it as an [`Arc`].
 #[derive(Debug)]
-struct CapClientInner {
+pub struct CapClient {
     /// This client's own capabilities.
     own: CapsBundle,
     /// The server's capabilities. Concurrent `refresh` calls coalesce into a single network hop.
@@ -69,35 +64,32 @@ pub enum ServerSupportError {
 
 impl CapClient {
     /// Create a client that will negotiate against the given capabilities endpoint.
-    pub fn new(capabilities_url: Url) -> Self {
-        Self {
-            inner: Arc::new(CapClientInner {
-                own: CapsBundle::default(),
-                server: CoalescingCell::default(),
-                capabilities_url,
-            }),
-        }
+    pub fn new(capabilities_url: Url) -> Arc<Self> {
+        Arc::new(Self {
+            own: CapsBundle::default(),
+            server: CoalescingCell::default(),
+            capabilities_url,
+        })
     }
 
     /// Register a capability this client advertises.
     pub fn add<C: Capability>(&self, cap: C) {
-        self.inner.own.add(cap);
+        self.own.add(cap);
     }
 
     /// Check whether this client advertises the given capability.
     pub fn get<C: Capability + Clone>(&self) -> Option<C> {
-        self.inner.own.get()
+        self.own.get()
     }
 
     /// Fetch the server's capabilities over the caller's client and patch the local cache.
     ///
     /// It is safe to call this in parallel, even under high load.
     pub async fn refresh(&self, client: &reqwest::Client) -> reqwest::Result<()> {
-        self.inner
-            .server
+        self.server
             .refresh(|| async {
                 let resp: CapabilitiesResponse = client
-                    .get(self.inner.capabilities_url.clone())
+                    .get(self.capabilities_url.clone())
                     .send()
                     .await?
                     .json()
@@ -117,7 +109,7 @@ impl CapClient {
     /// - `Err(ServerSupportError::Malformed)` - advertised, but its value did not deserialize into
     ///   `C`. The caller decides whether that is fatal or a reason to fall back.
     pub fn server_support<C: Capability>(&self) -> Result<Option<C>, ServerSupportError> {
-        let Some(server) = self.inner.server.get() else {
+        let Some(server) = self.server.get() else {
             return Err(ServerSupportError::NotFetched);
         };
         let Some(raw) = server.caps.get(C::NAME) else {
@@ -137,7 +129,7 @@ impl CapClient {
     /// The token is opaque: it is the server's [`ServerCaps::version`], echoed back to the server
     /// verbatim. The client never interprets it.
     pub(crate) fn known_token(&self) -> Option<String> {
-        self.inner.server.get().map(|caps| caps.version.clone())
+        self.server.get().map(|caps| caps.version.clone())
     }
 }
 
