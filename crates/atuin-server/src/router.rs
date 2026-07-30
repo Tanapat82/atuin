@@ -145,16 +145,15 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
             handlers::v0::capabilities::negotiate,
         ));
 
-    // The capabilities endpoint itself must never be gated by negotiation, so a client with a
-    // stale token can always refresh here without a 412.
-    let capabilities =
-        Router::new().route("/api/v0/capabilities", get(handlers::v0::capabilities::get));
+    // Two routes never negotiate, for different reasons. The capabilities endpoint must stay
+    // ungated so a client with a stale token can always refresh here without a 412; the health
+    // check must always answer for load balancers and monitors, independent of any capability
+    // state.
+    let unnegotiated = Router::new()
+        .route("/api/v0/capabilities", get(handlers::v0::capabilities::get))
+        .route("/healthz", get(handlers::health::health_check));
 
-    // The health check must always answer for load balancers and monitors, independent of any
-    // capability state, so it stays outside negotiation.
-    let health = Router::new().route("/healthz", get(handlers::health::health_check));
-
-    let routes = health.merge(negotiated).merge(capabilities);
+    let routes = unnegotiated.merge(negotiated);
 
     let path = settings.path.as_str();
     let routes = if path.is_empty() {
