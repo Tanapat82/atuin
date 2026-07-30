@@ -1,8 +1,8 @@
 //! The capabilities endpoint and the capability-negotiation middleware.
 //!
 //! Both take the [`CapServer`] as axum state, so they are independent of the database and of
-//! `AppState`. In the real router the endpoint reaches the `CapServer` through
-//! `FromRef<AppState<DB>>`, and the middleware is given it directly via `from_fn_with_state`.
+//! `AppState`. In the real router the endpoint gets it as its own router state via `with_state`,
+//! and the middleware is given it directly via `from_fn_with_state`.
 
 use atuin_domain::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
 use atuin_domain::caps::{CapServer, Negotiation};

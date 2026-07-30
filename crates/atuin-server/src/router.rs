@@ -2,7 +2,7 @@ use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse
 use atuin_domain::caps::CapServer;
 use axum::{
     Router,
-    extract::{FromRef, FromRequestParts, Request},
+    extract::{FromRequestParts, Request},
     http::{self, request::Parts},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -105,13 +105,6 @@ async fn semver(request: Request, next: Next) -> Response {
 pub struct AppState<DB: Database> {
     pub database: DB,
     pub settings: Settings,
-    pub caps: CapServer,
-}
-
-impl<DB: Database> FromRef<AppState<DB>> for CapServer {
-    fn from_ref(state: &AppState<DB>) -> Self {
-        state.caps.clone()
-    }
 }
 
 pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
@@ -134,9 +127,12 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
             handlers::v0::capabilities::negotiate,
         ));
 
+    // The capabilities handler reads the CapServer as this router's own state -- the same value the
+    // negotiate middleware is handed -- so it needs no FromRef projection out of AppState.
     let unnegotiated = Router::new()
         .route("/api/v0/capabilities", get(handlers::v0::capabilities::get))
-        .route("/healthz", get(handlers::health::health_check));
+        .route("/healthz", get(handlers::health::health_check))
+        .with_state(caps);
 
     let routes = unnegotiated.merge(negotiated);
 
@@ -149,11 +145,7 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
 
     routes
         .fallback(teapot)
-        .with_state(AppState {
-            database,
-            settings,
-            caps,
-        })
+        .with_state(AppState { database, settings })
         .layer(
             ServiceBuilder::new()
                 .layer(axum::middleware::from_fn(clacks_overhead))
