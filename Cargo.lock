@@ -412,11 +412,9 @@ dependencies = [
  "directories",
  "eyre",
  "getrandom 0.4.3",
- "http",
  "itertools",
  "pretty_assertions",
  "proptest",
- "reqwest",
  "rstest",
  "serde",
  "serde_json",
@@ -424,7 +422,6 @@ dependencies = [
  "sysinfo",
  "thiserror 2.0.18",
  "time",
- "tokio",
  "tracing",
  "tracing-subscriber",
  "unicode-segmentation",
@@ -432,7 +429,6 @@ dependencies = [
  "url",
  "uuid",
  "vt100",
- "wiremock",
 ]
 
 [[package]]
