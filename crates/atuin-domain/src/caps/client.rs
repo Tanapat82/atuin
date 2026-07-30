@@ -79,13 +79,13 @@ impl CapClient {
     }
 
     /// Register a capability this client advertises.
-    pub fn can<C: Capability>(&self, cap: C) {
-        self.inner.own.can(cap);
+    pub fn add<C: Capability>(&self, cap: C) {
+        self.inner.own.add(cap);
     }
 
     /// Check whether this client advertises the given capability.
-    pub fn support<C: Capability + Clone>(&self) -> Option<C> {
-        self.inner.own.support()
+    pub fn get<C: Capability + Clone>(&self) -> Option<C> {
+        self.inner.own.get()
     }
 
     /// Fetch the server's capabilities over the caller's client and patch the local cache.
@@ -188,7 +188,7 @@ mod tests {
     async fn client_observes_the_capability_the_server_advertises(http_client: reqwest::Client) {
         // Serve the exact wire body a real server would produce for the capabilities capability.
         let advertised = CapServer::builder()
-            .can(CapabilitiesCap { version: 1 })
+            .add(CapabilitiesCap { version: 1 })
             .build();
         let server = MockServer::start().await;
         Mock::given(method("GET"))

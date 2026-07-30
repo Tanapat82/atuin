@@ -75,7 +75,7 @@ pub struct CapServerBuilder {
 
 impl CapServerBuilder {
     /// Advertise a capability. A later call with the same name overwrites the earlier value.
-    pub fn can<C: Capability>(mut self, cap: C) -> Self {
+    pub fn add<C: Capability>(mut self, cap: C) -> Self {
         let value =
             serde_json::to_value(cap).expect("a capability value must be JSON-serializable");
         self.caps.insert(C::NAME.to_string(), value);
@@ -148,7 +148,7 @@ mod tests {
         let empty_b = CapServer::builder().build();
         assert_eq!(empty_a.token(), empty_b.token());
 
-        let with_cap = CapServer::builder().can(TestCap { n: 1 }).build();
+        let with_cap = CapServer::builder().add(TestCap { n: 1 }).build();
         assert_ne!(empty_a.token(), with_cap.token());
         assert!(with_cap.advertises("test/cap"));
     }
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn body_with_a_capability_round_trips_into_the_client_response_shape() {
-        let caps = CapServer::builder().can(TestCap { n: 7 }).build();
+        let caps = CapServer::builder().add(TestCap { n: 7 }).build();
         let resp: CapabilitiesResponse = serde_json::from_str(caps.body()).unwrap();
         assert_eq!(resp.version, caps.token());
         assert_eq!(

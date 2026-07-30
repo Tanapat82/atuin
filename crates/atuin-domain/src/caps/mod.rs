@@ -104,13 +104,13 @@ struct OwnCaps {
 }
 
 impl OwnCaps {
-    fn can<C: Capability>(&self, cap: C) {
+    fn add<C: Capability>(&self, cap: C) {
         self.caps
             .write()
             .insert(CapKey(C::NAME.to_string()), Box::new(cap));
     }
 
-    fn support<C: Capability + Clone>(&self) -> Option<C> {
+    fn get<C: Capability + Clone>(&self) -> Option<C> {
         self.caps
             .read()
             .get(C::NAME)

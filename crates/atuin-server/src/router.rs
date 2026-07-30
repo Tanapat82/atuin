@@ -111,7 +111,7 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
     // Advertise the self-referential capabilities capability, so every server that speaks the
     // protocol carries at least one concrete capability a client can observe.
     let caps = CapServer::builder()
-        .can(CapabilitiesCap { version: 1 })
+        .add(CapabilitiesCap { version: 1 })
         .build();
 
     let negotiated = Router::new()
