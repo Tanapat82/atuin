@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::Capability;
+use super::{Capability, DynCapability};
 
 /// The result of comparing a client's echoed capability token against the server's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,9 +71,10 @@ pub struct CapServerBuilder {
 impl CapServerBuilder {
     /// Advertise a capability. A later call with the same name overwrites the earlier value.
     pub fn add<C: Capability>(mut self, cap: C) -> Self {
-        let value =
-            serde_json::to_value(cap).expect("a capability value must be JSON-serializable");
-        self.caps.insert(C::NAME.to_string(), value);
+        let value = cap
+            .json()
+            .expect("a capability value must be JSON-serializable");
+        self.caps.insert(cap.name().to_string(), value);
         self
     }
 

@@ -40,7 +40,7 @@
 //! change on its next rejected request rather than pre-emptively from an earlier response.
 
 use parking_lot::RwLock;
-use std::{any::Any, borrow::Borrow, collections::HashMap, fmt};
+use std::{any::Any, borrow::Borrow, collections::BTreeMap, fmt};
 
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -67,15 +67,34 @@ impl Borrow<str> for CapKey {
 }
 
 /// A capability which two peers may negotiate.
-pub trait Capability: Any + Serialize + DeserializeOwned + Send + Sync + 'static {
+pub trait Capability: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The name this capability is indexed by on the wire, eg `sh.atuin.server/records.batch`.
     const NAME: &'static str;
+}
+
+/// A dyn-compatible version of [`Capability`].
+pub trait DynCapability: Any + Send + Sync {
+    /// Get the name of this capability.
+    fn name(&self) -> &'static str;
+
+    /// Convert this capability into a JSON value.
+    fn json(&self) -> Result<serde_json::Value, serde_json::Error>;
+}
+
+impl<C: Capability> DynCapability for C {
+    fn name(&self) -> &'static str {
+        C::NAME
+    }
+
+    fn json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        serde_json::to_value(self)
+    }
 }
 
 /// The capabilities a node advertises about itself.
 #[derive(Default)]
 struct CapsBundle {
-    caps: RwLock<HashMap<CapKey, Box<dyn Any + Send + Sync>>>,
+    caps: RwLock<BTreeMap<CapKey, Box<dyn DynCapability>>>,
 }
 
 impl CapsBundle {
@@ -91,7 +110,10 @@ impl CapsBundle {
         self.caps
             .read()
             .get(C::NAME)
-            .and_then(|cap| cap.downcast_ref::<C>())
+            .and_then(|cap| {
+                let cap: &dyn Any = &**cap;
+                cap.downcast_ref::<C>()
+            })
             .cloned()
     }
 }
