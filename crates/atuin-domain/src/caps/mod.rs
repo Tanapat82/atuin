@@ -65,7 +65,7 @@ impl Borrow<str> for CapKey {
 }
 
 /// A capability which two peers may negotiate.
-pub trait Capability: Serialize + DeserializeOwned + Send + Sync + 'static {
+pub trait Capability: Any + Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The name this capability is indexed by on the wire, eg `sh.atuin.server/records.batch`.
     const NAME: &'static str;
 }
@@ -104,12 +104,14 @@ struct OwnCaps {
 }
 
 impl OwnCaps {
+    /// Register a capability this node advertises.
     fn add<C: Capability>(&self, cap: C) {
         self.caps
             .write()
             .insert(CapKey(C::NAME.to_string()), Box::new(cap));
     }
 
+    /// Check whether this node advertises the given capability.
     fn get<C: Capability + Clone>(&self) -> Option<C> {
         self.caps
             .read()
