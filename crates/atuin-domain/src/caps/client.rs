@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use url::Url;
 
 use super::{CapKey, CapabilitiesResponse, Capability, OwnCaps};
-use crate::sync::CoalescingCell;
+use atuin_common::sync::CoalescingCell;
 
 /// Client-side capability set: advertises its own capabilities and can read the server's.
 ///

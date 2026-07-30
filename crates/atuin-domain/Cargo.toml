@@ -31,10 +31,10 @@ parking_lot = "0.12.5"
 reqwest-middleware = "0.5"
 http = "1.4.2"
 xxhash-rust = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 rstest = { workspace = true }
 proptest = { workspace = true }
 wiremock = "0.6"
+tokio = { workspace = true }
