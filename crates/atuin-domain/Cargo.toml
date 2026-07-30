@@ -27,7 +27,7 @@ url = { workspace = true }
 serde_json = { workspace = true }
 reqwest = { workspace = true }
 async-trait = { workspace = true }
-parking_lot = "0.12.5"
+parking_lot = { workspace = true }
 reqwest-middleware = "0.5"
 http = "1.4.2"
 xxhash-rust = { workspace = true }
