@@ -123,8 +123,18 @@ pub(crate) fn server_caps() -> CapServer {
 pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
     let caps = server_caps();
 
-    // The `/api/v0/*` sync surface negotiates capabilities.
+    // Everything except the health check negotiates capabilities: a capability-aware client that
+    // presents a stale token gets a 412 so it refreshes before we act on its request. Clients that
+    // send no `X-Atuin-Capabilities-Known` header -- browsers, monitors, pre-capabilities clients --
+    // pass straight through, so negotiation only ever affects atuin clients whose view of the
+    // server is out of date.
     let negotiated = Router::new()
+        .route("/", get(handlers::index))
+        .route("/user/{username}", get(handlers::user::get))
+        .route("/account", delete(handlers::user::delete))
+        .route("/account/password", patch(handlers::user::change_password))
+        .route("/register", post(handlers::user::register))
+        .route("/login", post(handlers::user::login))
         .route("/api/v0/me", get(handlers::v0::me::get))
         .route("/api/v0/record", post(handlers::v0::record::post))
         .route("/api/v0/record", get(handlers::v0::record::index))
@@ -140,17 +150,11 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
     let capabilities =
         Router::new().route("/api/v0/capabilities", get(handlers::v0::capabilities::get));
 
-    // Health, index, and account/auth endpoints are not part of the sync negotiation.
-    let unnegotiated = Router::new()
-        .route("/", get(handlers::index))
-        .route("/healthz", get(handlers::health::health_check))
-        .route("/user/{username}", get(handlers::user::get))
-        .route("/account", delete(handlers::user::delete))
-        .route("/account/password", patch(handlers::user::change_password))
-        .route("/register", post(handlers::user::register))
-        .route("/login", post(handlers::user::login));
+    // The health check must always answer for load balancers and monitors, independent of any
+    // capability state, so it stays outside negotiation.
+    let health = Router::new().route("/healthz", get(handlers::health::health_check));
 
-    let routes = unnegotiated.merge(negotiated).merge(capabilities);
+    let routes = health.merge(negotiated).merge(capabilities);
 
     let path = settings.path.as_str();
     let routes = if path.is_empty() {
