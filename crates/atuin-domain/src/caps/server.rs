@@ -39,7 +39,7 @@ impl CapServer {
     }
 
     /// The pre-serialized capabilities document, served verbatim by the capabilities endpoint.
-    /// Deserializes into a [`super::CapabilitiesResponse`].
+    /// Deserializes into a [`crate::api::CapabilitiesResponse`].
     pub fn body(&self) -> &str {
         &self.body
     }
@@ -106,7 +106,8 @@ impl CapServerBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::caps::{CapabilitiesCap, CapabilitiesResponse, Capability};
+    use crate::api::CapabilitiesResponse;
+    use crate::caps::{CapabilitiesCap, Capability};
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Serialize, Deserialize)]

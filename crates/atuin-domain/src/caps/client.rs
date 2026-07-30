@@ -2,7 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use url::Url;
 
-use super::{CapKey, CapabilitiesResponse, Capability, OwnCaps};
+use super::{CapKey, Capability, CapsBundle};
+use crate::api::CapabilitiesResponse;
 use atuin_common::sync::CoalescingCell;
 
 /// Client-side capability set: advertises its own capabilities and can read the server's.
@@ -19,7 +20,7 @@ pub struct CapClient {
 #[derive(Debug)]
 struct CapClientInner {
     /// This client's own capabilities.
-    own: OwnCaps,
+    own: CapsBundle,
     /// The server's capabilities. Concurrent `refresh` calls coalesce into a single network hop.
     server: CoalescingCell<ServerCaps>,
     /// The server's capabilities endpoint. Passed in by the caller so this crate stays agnostic of
@@ -71,7 +72,7 @@ impl CapClient {
     pub fn new(capabilities_url: Url) -> Self {
         Self {
             inner: Arc::new(CapClientInner {
-                own: OwnCaps::default(),
+                own: CapsBundle::default(),
                 server: CoalescingCell::default(),
                 capabilities_url,
             }),

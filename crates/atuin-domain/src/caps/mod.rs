@@ -42,14 +42,16 @@
 use parking_lot::RwLock;
 use std::{any::Any, borrow::Borrow, collections::HashMap, fmt};
 
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 
 pub mod http;
 
+mod all;
 mod client;
 mod middleware;
 mod server;
 
+pub use all::CapabilitiesCap;
 pub use client::{CapClient, ServerSupportError};
 pub use middleware::{CapMiddleware, CapabilitiesExt};
 pub use server::{CapServer, CapServerBuilder, Negotiation};
@@ -70,40 +72,13 @@ pub trait Capability: Any + Serialize + DeserializeOwned + Send + Sync + 'static
     const NAME: &'static str;
 }
 
-/// The capability-negotiation protocol itself, expressed as a capability.
-///
-/// A server that speaks capabilities advertises this, so a client can observe -- from the
-/// capability set alone -- that the protocol is supported, and at which version. It is
-/// deliberately self-referential: receiving any capability document already implies the server
-/// understands capabilities. Naming that fact gives the negotiation machinery a concrete
-/// capability to carry today, while the richer feature-specific ones live with their features.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CapabilitiesCap {
-    /// The version of the capability-negotiation protocol the server implements.
-    pub version: u32,
-}
-
-impl Capability for CapabilitiesCap {
-    const NAME: &'static str = "sh.atuin.server/capabilities";
-}
-
-/// The capabilities a server advertises, as returned from its capabilities endpoint.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CapabilitiesResponse {
-    /// An opaque capability token issued by the server.
-    pub version: String,
-
-    /// The list of capabilities this server supports, as a map of capability name to its value.
-    pub capabilities: HashMap<String, serde_json::Value>,
-}
-
 /// The capabilities a node advertises about itself.
 #[derive(Default)]
-struct OwnCaps {
+struct CapsBundle {
     caps: RwLock<HashMap<CapKey, Box<dyn Any + Send + Sync>>>,
 }
 
-impl OwnCaps {
+impl CapsBundle {
     /// Register a capability this node advertises.
     fn add<C: Capability>(&self, cap: C) {
         self.caps
@@ -121,7 +96,7 @@ impl OwnCaps {
     }
 }
 
-impl fmt::Debug for OwnCaps {
+impl fmt::Debug for CapsBundle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // `dyn Any` is not `Debug`; show which capabilities are present, not their contents.
         f.debug_set().entries(self.caps.read().keys()).finish()
