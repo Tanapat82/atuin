@@ -1,7 +1,8 @@
+use atuin_common::caps::CapServer;
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
 use axum::{
     Router,
-    extract::{FromRequestParts, Request},
+    extract::{FromRef, FromRequestParts, Request},
     http::{self, request::Parts},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -104,38 +105,72 @@ async fn semver(request: Request, next: Next) -> Response {
 pub struct AppState<DB: Database> {
     pub database: DB,
     pub settings: Settings,
+    pub caps: CapServer,
+}
+
+impl<DB: Database> FromRef<AppState<DB>> for CapServer {
+    fn from_ref(state: &AppState<DB>) -> Self {
+        state.caps.clone()
+    }
+}
+
+/// The capability set the self-hosted server advertises: empty. Absence of
+/// `sh.atuin.server/records.bundle` is how clients learn packfile bundling is unsupported.
+pub(crate) fn server_caps() -> CapServer {
+    CapServer::builder().build()
 }
 
 pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
-    let routes = Router::new()
-        .route("/", get(handlers::index))
-        .route("/healthz", get(handlers::health::health_check));
+    let caps = server_caps();
 
-    let routes = routes
-        .route("/user/{username}", get(handlers::user::get))
-        .route("/account", delete(handlers::user::delete))
-        .route("/account/password", patch(handlers::user::change_password))
-        .route("/register", post(handlers::user::register))
-        .route("/login", post(handlers::user::login))
+    // The `/api/v0/*` sync surface negotiates capabilities.
+    let negotiated = Router::new()
         .route("/api/v0/me", get(handlers::v0::me::get))
         .route("/api/v0/record", post(handlers::v0::record::post))
         .route("/api/v0/record", get(handlers::v0::record::index))
         .route("/api/v0/record/next", get(handlers::v0::record::next))
-        .route("/api/v0/store", delete(handlers::v0::store::delete));
+        .route("/api/v0/store", delete(handlers::v0::store::delete))
+        .layer(axum::middleware::from_fn_with_state(
+            caps.clone(),
+            handlers::v0::capabilities::negotiate,
+        ));
+
+    // The capabilities endpoint itself must never be gated by negotiation, so a client with a
+    // stale token can always refresh here without a 412.
+    let capabilities =
+        Router::new().route("/api/v0/capabilities", get(handlers::v0::capabilities::get));
+
+    // Health, index, and account/auth endpoints are not part of the sync negotiation.
+    let unnegotiated = Router::new()
+        .route("/", get(handlers::index))
+        .route("/healthz", get(handlers::health::health_check))
+        .route("/user/{username}", get(handlers::user::get))
+        .route("/account", delete(handlers::user::delete))
+        .route("/account/password", patch(handlers::user::change_password))
+        .route("/register", post(handlers::user::register))
+        .route("/login", post(handlers::user::login));
+
+    let routes = unnegotiated.merge(negotiated).merge(capabilities);
 
     let path = settings.path.as_str();
-    if path.is_empty() {
+    let routes = if path.is_empty() {
         routes
     } else {
         Router::new().nest(path, routes)
-    }
-    .fallback(teapot)
-    .with_state(AppState { database, settings })
-    .layer(
-        ServiceBuilder::new()
-            .layer(axum::middleware::from_fn(clacks_overhead))
-            .layer(TraceLayer::new_for_http())
-            .layer(axum::middleware::from_fn(metrics::track_metrics))
-            .layer(axum::middleware::from_fn(semver)),
-    )
+    };
+
+    routes
+        .fallback(teapot)
+        .with_state(AppState {
+            database,
+            settings,
+            caps,
+        })
+        .layer(
+            ServiceBuilder::new()
+                .layer(axum::middleware::from_fn(clacks_overhead))
+                .layer(TraceLayer::new_for_http())
+                .layer(axum::middleware::from_fn(metrics::track_metrics))
+                .layer(axum::middleware::from_fn(semver)),
+        )
 }
