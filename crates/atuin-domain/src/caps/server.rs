@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use serde_json::Value;
 
-use super::{Capability, DynCapability};
+use super::{Capability, CapsBundle};
 
 /// The result of comparing a client's echoed capability token against the server's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,17 +65,14 @@ impl CapServer {
 /// [`build`](Self::build). A builder with no `add` calls yields a server that advertises nothing.
 #[derive(Debug, Default)]
 pub struct CapServerBuilder {
-    caps: BTreeMap<String, Value>,
+    caps: CapsBundle,
 }
 
 impl CapServerBuilder {
     /// Advertise a capability. A later call with the same name overwrites the earlier value.
     #[allow(clippy::should_implement_trait)]
-    pub fn add<C: Capability>(mut self, cap: C) -> Self {
-        let value = cap
-            .json()
-            .expect("a capability value must be JSON-serializable");
-        self.caps.insert(cap.name().to_string(), value);
+    pub fn add<C: Capability>(self, cap: C) -> Self {
+        self.caps.add(cap);
         self
     }
 
@@ -83,7 +80,8 @@ impl CapServerBuilder {
     pub fn build(self) -> Arc<CapServer> {
         // A `BTreeMap` serializes its keys in sorted order, so the token is byte-identical on every
         // node running the same capability set.
-        let canonical = serde_json::to_vec(&self.caps).expect("capability map serializes");
+        let caps = self.caps.to_wire();
+        let canonical = serde_json::to_vec(&caps).expect("capability map serializes");
         let token = format!("{:016x}", xxhash_rust::xxh3::xxh3_64(&canonical));
 
         #[derive(Serialize)]
@@ -93,15 +91,11 @@ impl CapServerBuilder {
         }
         let body = serde_json::to_string(&Wire {
             version: &token,
-            capabilities: &self.caps,
+            capabilities: &caps,
         })
         .expect("capabilities document serializes");
 
-        Arc::new(CapServer {
-            token,
-            body,
-            caps: self.caps,
-        })
+        Arc::new(CapServer { token, body, caps })
     }
 }
 

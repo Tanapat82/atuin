@@ -116,6 +116,20 @@ impl CapsBundle {
             })
             .cloned()
     }
+
+    /// Serialize every advertised capability into a name -> JSON map, in sorted key order.
+    fn to_wire(&self) -> BTreeMap<String, serde_json::Value> {
+        self.caps
+            .read()
+            .iter()
+            .map(|(name, cap)| {
+                let value = cap
+                    .json()
+                    .expect("a capability value must be JSON-serializable");
+                (name.0.clone(), value)
+            })
+            .collect()
+    }
 }
 
 impl fmt::Debug for CapsBundle {
