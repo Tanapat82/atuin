@@ -1,14 +1,37 @@
-//! Capabilities system used by atuin.
+//! Capability system used by atuin.
+//!
+//! # Context
 //!
 //! A node advertises capabilities about itself and, if it is a client, can read the server's.
-//! The asymmetry is deliberate: capabilities are announced by *hosting* an endpoint. The server
-//! hosts one; the client does not, so the server has nowhere to query the client's capabilities
-//! from (yet).
 //!
-//! - [`CapServer`] -- an immutable, build-once set of a server's own capabilities with a
-//!   precomputed version token; see [`CapServer::negotiate`].
-//! - [`CapClient`] -- own capabilities, plus [`CapClient::refresh`] to pull the server's over a
-//!   borrowed [`reqwest::Client`] and [`CapClient::server_support`] to read them back.
+//! Atuin's client and server versions are not necessarily always compatible. There are features
+//! that clients may support, but outdated servers will not.
+//!
+//! The capability system is designed to help us bridge the gap between the two.
+//!
+//! # Design
+//!
+//! - Each capability has a unique `CRI` (capability resource identifier), eg.
+//!   `sh.atuin.server/capabilities`.
+//! - Each capability has arbitrary associated data, for example `{ "version": 1 }`.
+//!
+//! The client passes a header with each request it makes, `x-atuin-capabilities-known: <hash>`
+//! which communicates to the server what capabilities the client is aware of. If the server's
+//! capability hash does not match that of what the client believes, the server rejects the request
+//! with a 412, after which the client polls `/api/v0/capabilities` to get the new capability list
+//! as well as the new hash of the capability list.
+//!
+//! The client then passes this updated hash back to the server and all is well.
+//!
+//! The server capabilities are sent with every response as part of `x-atuin-capabilities-available`
+//! in order to eagerly communicate to the client that the capability set needs to be updated
+//! (hopefully to avoid unnecessary 412s).
+//!
+//! # Implementation
+//!
+//! The client side is implemented as reqwest middleware in [`client::CapClient`].
+//! The server side is implemented as a plain struct that can be embedded in any server, in
+//! [`client::CapServer`].
 
 use parking_lot::RwLock;
 use std::{any::Any, borrow::Borrow, collections::HashMap, fmt};
@@ -62,11 +85,6 @@ impl Capability for CapabilitiesCap {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CapabilitiesResponse {
     /// An opaque capability token issued by the server.
-    ///
-    /// The server is free to choose its own scheme (a hash, a monotonic counter, a UUID, ...); the
-    /// client stores and echoes this value back verbatim in `X-Atuin-Capabilities-Known` and never
-    /// interprets it. If the client and server disagree on this token, none of the capabilities are
-    /// to be assumed.
     pub version: String,
 
     /// The list of capabilities this server supports, as a map of capability name to its value.
