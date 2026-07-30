@@ -4,6 +4,8 @@
 //! `AppState`. In the real router the endpoint gets it as its own router state via `with_state`,
 //! and the middleware is given it directly via `from_fn_with_state`.
 
+use std::sync::Arc;
+
 use atuin_domain::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
 use atuin_domain::caps::{CapServer, Negotiation};
 use axum::{
@@ -14,7 +16,7 @@ use axum::{
 };
 
 /// `GET /api/v0/capabilities` -- serve the pre-serialized capability document.
-pub async fn get(State(caps): State<CapServer>) -> Response {
+pub async fn get(State(caps): State<Arc<CapServer>>) -> Response {
     (
         [(CONTENT_TYPE, HeaderValue::from_static("application/json"))],
         caps.body().to_owned(),
@@ -28,7 +30,11 @@ pub async fn get(State(caps): State<CapServer>) -> Response {
 /// `X-Atuin-Capabilities-Known` with a token differing from ours. Absent or matching tokens pass
 /// straight through, so pre-capabilities clients are never affected. A non-UTF-8 known header is
 /// treated as absent.
-pub async fn negotiate(State(caps): State<CapServer>, request: Request, next: Next) -> Response {
+pub async fn negotiate(
+    State(caps): State<Arc<CapServer>>,
+    request: Request,
+    next: Next,
+) -> Response {
     let known = request
         .headers()
         .get(KNOWN_HEADER)
@@ -66,13 +72,13 @@ mod tests {
 
     /// An empty capability set -- advertises nothing, but still issues a stable token.
     #[fixture]
-    fn caps() -> CapServer {
+    fn caps() -> Arc<CapServer> {
         CapServer::builder().build()
     }
 
     #[rstest]
     #[tokio::test]
-    async fn endpoint_serves_the_document(caps: CapServer) {
+    async fn endpoint_serves_the_document(caps: Arc<CapServer>) {
         let app: Router = Router::new()
             .route("/api/v0/capabilities", axum_get(get))
             .with_state(caps.clone());
@@ -98,7 +104,7 @@ mod tests {
         assert_eq!(bytes.as_ref(), caps.body().as_bytes());
     }
 
-    fn negotiating_app(caps: CapServer) -> Router {
+    fn negotiating_app(caps: Arc<CapServer>) -> Router {
         Router::new()
             .route("/probe", axum_get(|| async { "ok" }))
             .layer(axum::middleware::from_fn_with_state(caps, negotiate))
@@ -106,7 +112,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn absent_known_header_passes(caps: CapServer) {
+    async fn absent_known_header_passes(caps: Arc<CapServer>) {
         let resp = negotiating_app(caps)
             .oneshot(
                 Request::builder()
@@ -121,7 +127,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn matching_token_passes(caps: CapServer) {
+    async fn matching_token_passes(caps: Arc<CapServer>) {
         let resp = negotiating_app(caps.clone())
             .oneshot(
                 Request::builder()
@@ -137,7 +143,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn non_utf8_known_header_is_treated_as_absent_and_passes(caps: CapServer) {
+    async fn non_utf8_known_header_is_treated_as_absent_and_passes(caps: Arc<CapServer>) {
         // `to_str().ok()` turns invalid UTF-8 into `None`, i.e. "no token known" -- not a 412,
         // and not a panic.
         let value = HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap();
@@ -156,7 +162,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn stale_token_rejects_with_available_header(caps: CapServer) {
+    async fn stale_token_rejects_with_available_header(caps: Arc<CapServer>) {
         let resp = negotiating_app(caps.clone())
             .oneshot(
                 Request::builder()

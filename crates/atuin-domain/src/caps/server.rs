@@ -15,14 +15,9 @@ pub enum Negotiation {
     Stale,
 }
 
-/// Immutable, cheaply-cloneable set of capabilities a server advertises.
-#[derive(Debug, Clone)]
-pub struct CapServer {
-    inner: Arc<Inner>,
-}
-
+/// Immutable set of capabilities a server advertises. Thread it as an [`Arc`].
 #[derive(Debug)]
-struct Inner {
+pub struct CapServer {
     /// Opaque version token (xxh3 of the canonical capability set), computed once.
     token: String,
     /// Pre-serialized capabilities document (a `CapabilitiesResponse` as JSON).
@@ -40,18 +35,18 @@ impl CapServer {
     /// The opaque version token this server advertises. Stable for a given capability set; the
     /// client echoes it back verbatim and never interprets it.
     pub fn token(&self) -> &str {
-        &self.inner.token
+        &self.token
     }
 
     /// The pre-serialized capabilities document, served verbatim by the capabilities endpoint.
     /// Deserializes into a [`super::CapabilitiesResponse`].
     pub fn body(&self) -> &str {
-        &self.inner.body
+        &self.body
     }
 
     /// Whether this server advertises the capability with the given wire name.
     pub fn advertises(&self, name: &str) -> bool {
-        self.inner.caps.contains_key(name)
+        self.caps.contains_key(name)
     }
 
     /// Decide whether a request whose client echoed `known` is current.
@@ -60,7 +55,7 @@ impl CapServer {
     /// token is [`Negotiation::Stale`]. A client that sends no token is therefore never rejected.
     pub fn negotiate(&self, known: Option<&str>) -> Negotiation {
         match known {
-            Some(known) if known != self.inner.token => Negotiation::Stale,
+            Some(known) if known != self.token => Negotiation::Stale,
             _ => Negotiation::Current,
         }
     }
@@ -83,7 +78,7 @@ impl CapServerBuilder {
     }
 
     /// Finalize: compute the version token and pre-serialize the document. Cheap work done once.
-    pub fn build(self) -> CapServer {
+    pub fn build(self) -> Arc<CapServer> {
         // A `BTreeMap` serializes its keys in sorted order, so the token is byte-identical on every
         // node running the same capability set.
         let canonical = serde_json::to_vec(&self.caps).expect("capability map serializes");
@@ -100,13 +95,11 @@ impl CapServerBuilder {
         })
         .expect("capabilities document serializes");
 
-        CapServer {
-            inner: Arc::new(Inner {
-                token,
-                body,
-                caps: self.caps,
-            }),
-        }
+        Arc::new(CapServer {
+            token,
+            body,
+            caps: self.caps,
+        })
     }
 }
 
