@@ -32,6 +32,12 @@
 //! The client side is implemented as reqwest middleware in [`client::CapClient`].
 //! The server side is implemented as a plain struct that can be embedded in any server, in
 //! `client::CapServer`.
+//!
+//! # TODO
+//!
+//! The eager `x-atuin-capabilities-available` path described above is not implemented yet: the
+//! server only sends that header on a 412, so a stale client currently learns of a capability
+//! change on its next rejected request rather than pre-emptively from an earlier response.
 
 use parking_lot::RwLock;
 use std::{any::Any, borrow::Borrow, collections::HashMap, fmt};
