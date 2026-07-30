@@ -127,8 +127,6 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
             handlers::v0::capabilities::negotiate,
         ));
 
-    // The capabilities handler reads the CapServer as this router's own state -- the same value the
-    // negotiate middleware is handed -- so it needs no FromRef projection out of AppState.
     let unnegotiated = Router::new()
         .route("/api/v0/capabilities", get(handlers::v0::capabilities::get))
         .route("/healthz", get(handlers::health::health_check))
