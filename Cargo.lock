@@ -637,6 +637,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "rand 0.8.7",
  "reqwest",
+ "rstest",
  "serde",
  "tokio",
  "tower",
