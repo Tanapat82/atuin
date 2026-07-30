@@ -61,8 +61,8 @@ impl CapServer {
     }
 }
 
-/// Builder for [`CapServer`]. Register capabilities with [`can`](Self::can), then
-/// [`build`](Self::build). A builder with no `can` calls yields a server that advertises nothing.
+/// Builder for [`CapServer`]. Register capabilities with [`add`](Self::add), then
+/// [`build`](Self::build). A builder with no `add` calls yields a server that advertises nothing.
 #[derive(Debug, Default)]
 pub struct CapServerBuilder {
     caps: BTreeMap<String, Value>,
@@ -70,6 +70,7 @@ pub struct CapServerBuilder {
 
 impl CapServerBuilder {
     /// Advertise a capability. A later call with the same name overwrites the earlier value.
+    #[allow(clippy::should_implement_trait)]
     pub fn add<C: Capability>(mut self, cap: C) -> Self {
         let value = cap
             .json()
