@@ -93,7 +93,7 @@ impl<C: Capability> DynCapability for C {
 
 /// The capabilities a node advertises about itself.
 #[derive(Default)]
-struct CapsBundle {
+pub struct CapsBundle {
     caps: RwLock<BTreeMap<CapKey, Box<dyn DynCapability>>>,
 }
 
@@ -106,7 +106,7 @@ impl CapsBundle {
     }
 
     /// Check whether this node advertises the given capability.
-    fn get<C: Capability + Clone>(&self) -> Option<C> {
+    pub fn get<C: Capability + Clone>(&self) -> Option<C> {
         self.caps
             .read()
             .get(C::NAME)

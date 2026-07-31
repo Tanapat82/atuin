@@ -22,8 +22,8 @@ pub struct CapServer {
     token: String,
     /// Pre-serialized capabilities document (a `CapabilitiesResponse` as JSON).
     body: String,
-    /// The advertised capabilities, kept for introspection (`advertises`).
-    caps: BTreeMap<String, Value>,
+    /// The advertised capabilities, exposed for typed introspection via `caps`.
+    caps: CapsBundle,
 }
 
 impl CapServer {
@@ -44,9 +44,9 @@ impl CapServer {
         &self.body
     }
 
-    /// Whether this server advertises the capability with the given wire name.
-    pub fn advertises(&self, name: &str) -> bool {
-        self.caps.contains_key(name)
+    /// The capabilities this server advertises, for typed introspection.
+    pub fn caps(&self) -> &CapsBundle {
+        &self.caps
     }
 
     /// Decide whether a request whose client echoed `known` is current.
@@ -80,8 +80,8 @@ impl CapServerBuilder {
     pub fn build(self) -> Arc<CapServer> {
         // A `BTreeMap` serializes its keys in sorted order, so the token is byte-identical on every
         // node running the same capability set.
-        let caps = self.caps.to_wire();
-        let canonical = serde_json::to_vec(&caps).expect("capability map serializes");
+        let wire = self.caps.to_wire();
+        let canonical = serde_json::to_vec(&wire).expect("capability map serializes");
         let token = format!("{:016x}", xxhash_rust::xxh3::xxh3_64(&canonical));
 
         #[derive(Serialize)]
@@ -91,11 +91,15 @@ impl CapServerBuilder {
         }
         let body = serde_json::to_string(&Wire {
             version: &token,
-            capabilities: &caps,
+            capabilities: &wire,
         })
         .expect("capabilities document serializes");
 
-        Arc::new(CapServer { token, body, caps })
+        Arc::new(CapServer {
+            token,
+            body,
+            caps: self.caps,
+        })
     }
 }
 
@@ -117,8 +121,8 @@ mod tests {
     #[test]
     fn empty_server_advertises_nothing() {
         let caps = CapServer::builder().build();
-        assert!(!caps.advertises("test/cap"));
-        assert!(!caps.advertises(CapabilitiesCap::NAME));
+        assert!(caps.caps().get::<TestCap>().is_none());
+        assert!(caps.caps().get::<CapabilitiesCap>().is_none());
     }
 
     #[test]
@@ -140,7 +144,7 @@ mod tests {
 
         let with_cap = CapServer::builder().add(TestCap { n: 1 }).build();
         assert_ne!(empty_a.token(), with_cap.token());
-        assert!(with_cap.advertises("test/cap"));
+        assert!(with_cap.caps().get::<TestCap>().is_some());
     }
 
     #[test]
