@@ -46,6 +46,9 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub mod http;
 
+#[cfg(feature = "axum")]
+pub mod axum;
+
 mod all;
 mod client;
 mod middleware;

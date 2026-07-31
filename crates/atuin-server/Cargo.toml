@@ -25,7 +25,7 @@ vendored-tls = ["reqwest/native-tls-vendored"]
 
 [dependencies]
 atuin-common = { workspace = true }
-atuin-domain = { workspace = true }
+atuin-domain = { workspace = true, features = ["axum"] }
 atuin-server-database = { workspace = true }
 atuin-server-postgres = { workspace = true }
 atuin-server-sqlite = { workspace = true }
