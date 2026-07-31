@@ -1,13 +1,14 @@
-//! Axum integration for capability negotiation: the capabilities endpoint and the negotiation
-//! middleware. Gated behind the `axum` feature.
+//! Axum integration for capability negotiation: the capabilities endpoint, the negotiation
+//! middleware, and a [`Router`] extension that installs it. Gated behind the `axum` feature.
 //!
-//! Both take the [`CapServer`] as axum state, so they are independent of any database or app
-//! state. In a router the endpoint gets it via `with_state` and the middleware via
-//! `from_fn_with_state`.
+//! The handlers take the [`CapServer`] as axum state, so they are independent of any database or
+//! app state. In a router the endpoint gets it via `with_state` and the middleware via
+//! [`CapabilitiesRouterExt::negotiate_capabilities`].
 
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::{Request, State},
     http::{HeaderName, HeaderValue, StatusCode, header::CONTENT_TYPE},
     middleware::Next,
@@ -55,5 +56,151 @@ pub async fn negotiate(
             }
             response
         }
+    }
+}
+
+/// Install capability negotiation onto an axum [`Router`].
+pub trait CapabilitiesRouterExt {
+    /// Layer [`negotiate`] onto this router, rejecting requests whose capability token is stale.
+    fn negotiate_capabilities(self, caps: Arc<CapServer>) -> Self;
+}
+
+impl<S> CapabilitiesRouterExt for Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    fn negotiate_capabilities(self, caps: Arc<CapServer>) -> Self {
+        self.layer(axum::middleware::from_fn_with_state(caps, negotiate))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CapabilitiesRouterExt, get};
+    use std::sync::Arc;
+
+    use crate::caps::CapServer;
+    use crate::caps::http::{AVAILABLE_HEADER, KNOWN_HEADER};
+    use axum::{
+        Router,
+        body::Body,
+        http::{HeaderValue, Request, StatusCode},
+        routing::get as axum_get,
+    };
+    use rstest::{fixture, rstest};
+    use tower::ServiceExt; // oneshot
+
+    /// An empty capability set -- advertises nothing, but still issues a stable token.
+    #[fixture]
+    fn caps() -> Arc<CapServer> {
+        CapServer::builder().build()
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn endpoint_serves_the_document(caps: Arc<CapServer>) {
+        let app: Router = Router::new()
+            .route("/api/v0/capabilities", axum_get(get))
+            .with_state(caps.clone());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v0/capabilities")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "application/json"
+        );
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(bytes.as_ref(), caps.body().as_bytes());
+    }
+
+    fn negotiating_app(caps: Arc<CapServer>) -> Router {
+        Router::new()
+            .route("/probe", axum_get(|| async { "ok" }))
+            .negotiate_capabilities(caps)
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn absent_known_header_passes(caps: Arc<CapServer>) {
+        let resp = negotiating_app(caps)
+            .oneshot(
+                Request::builder()
+                    .uri("/probe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn matching_token_passes(caps: Arc<CapServer>) {
+        let resp = negotiating_app(caps.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/probe")
+                    .header(KNOWN_HEADER, caps.token())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn non_utf8_known_header_is_treated_as_absent_and_passes(caps: Arc<CapServer>) {
+        // `to_str().ok()` turns invalid UTF-8 into `None`, i.e. "no token known" -- not a 412,
+        // and not a panic.
+        let value = HeaderValue::from_bytes(&[0xff, 0xfe]).unwrap();
+        let resp = negotiating_app(caps)
+            .oneshot(
+                Request::builder()
+                    .uri("/probe")
+                    .header(KNOWN_HEADER, value)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn stale_token_rejects_with_available_header(caps: Arc<CapServer>) {
+        let resp = negotiating_app(caps.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/probe")
+                    .header(KNOWN_HEADER, "deadbeefdeadbeef")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(
+            resp.headers()
+                .get(AVAILABLE_HEADER)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            caps.token()
+        );
     }
 }

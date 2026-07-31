@@ -1,4 +1,5 @@
 use atuin_domain::api::{ATUIN_CARGO_VERSION, ATUIN_HEADER_VERSION, ErrorResponse};
+use atuin_domain::caps::axum::{CapabilitiesRouterExt, get as capabilities_endpoint};
 use atuin_domain::caps::{CapServer, CapabilitiesCap};
 use axum::{
     Router,
@@ -126,13 +127,10 @@ pub fn router<DB: Database>(database: DB, settings: Settings) -> Router {
         .route("/api/v0/record", get(handlers::v0::record::index))
         .route("/api/v0/record/next", get(handlers::v0::record::next))
         .route("/api/v0/store", delete(handlers::v0::store::delete))
-        .layer(axum::middleware::from_fn_with_state(
-            caps.clone(),
-            handlers::v0::capabilities::negotiate,
-        ));
+        .negotiate_capabilities(caps.clone());
 
     let unnegotiated = Router::new()
-        .route("/api/v0/capabilities", get(handlers::v0::capabilities::get))
+        .route("/api/v0/capabilities", get(capabilities_endpoint))
         .route("/healthz", get(handlers::health::health_check))
         .with_state(caps);
 

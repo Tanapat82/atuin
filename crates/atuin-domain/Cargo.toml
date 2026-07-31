@@ -43,3 +43,4 @@ rstest = { workspace = true }
 proptest = { workspace = true }
 wiremock = { workspace = true }
 tokio = { workspace = true }
+tower = { workspace = true, features = ["util"] }
