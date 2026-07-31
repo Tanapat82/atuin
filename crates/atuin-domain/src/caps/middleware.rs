@@ -106,11 +106,9 @@ mod tests {
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// A reqwest client with the process-default crypto provider installed -- every network test
-    /// needs the provider in place before it builds a client.
+    /// A plain reqwest client for the network tests.
     #[fixture]
     fn http_client() -> reqwest::Client {
-        atuin_common::tls::ensure_crypto_provider();
         reqwest::Client::new()
     }
 
