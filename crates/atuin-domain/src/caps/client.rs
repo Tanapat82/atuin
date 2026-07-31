@@ -9,7 +9,7 @@ use atuin_common::sync::CoalescingCell;
 /// Client-side capability set: advertises its own capabilities and can read the server's.
 ///
 /// The server's capabilities are populated by [`CapClient::refresh`], which the crate drives at
-/// negotiation time; [`CapClient::server_support`] is then a pure, offline read of that cache.
+/// negotiation time; [`CapClient::get_server`] is then a pure, offline read of that cache.
 ///
 /// Thread it as an [`Arc`].
 #[derive(Debug)]
@@ -108,7 +108,7 @@ impl CapClient {
     /// - `Err(ServerSupportError::NotFetched)` - capabilities have not been fetched yet.
     /// - `Err(ServerSupportError::Malformed)` - advertised, but its value did not deserialize into
     ///   `C`. The caller decides whether that is fatal or a reason to fall back.
-    pub fn server_support<C: Capability>(&self) -> Result<Option<C>, ServerSupportError> {
+    pub fn get_server<C: Capability>(&self) -> Result<Option<C>, ServerSupportError> {
         let Some(server) = self.server.get() else {
             return Err(ServerSupportError::NotFetched);
         };
@@ -197,7 +197,7 @@ mod tests {
 
         // Nothing fetched yet, so the capability cannot be observed.
         assert!(matches!(
-            client.server_support::<CapabilitiesCap>(),
+            client.get_server::<CapabilitiesCap>(),
             Err(ServerSupportError::NotFetched)
         ));
 
@@ -205,7 +205,7 @@ mod tests {
 
         // Having refreshed, the client observes the capability the server advertised.
         assert_eq!(
-            client.server_support::<CapabilitiesCap>().unwrap(),
+            client.get_server::<CapabilitiesCap>().unwrap(),
             Some(CapabilitiesCap { version: 1 })
         );
     }
