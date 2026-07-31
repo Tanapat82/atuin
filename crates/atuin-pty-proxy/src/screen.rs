@@ -3,7 +3,7 @@ use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::compositor::Compositor;
+use crate::compositor::{Compositor, lock_unpoisoned};
 
 pub(crate) fn socket_path() -> PathBuf {
     let dir = std::env::temp_dir();
@@ -31,10 +31,7 @@ pub(crate) fn spawn_socket_server<W: Write + Send + 'static>(
                 Err(_) => break,
             };
 
-            let data = match compositor.lock() {
-                Ok(compositor) => encode_screen(compositor.screen()),
-                Err(_) => break,
-            };
+            let data = encode_screen(lock_unpoisoned(&compositor).screen());
             let _ = stream.write_all(&data);
             let _ = stream.flush();
         }
