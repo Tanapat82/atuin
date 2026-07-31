@@ -1,6 +1,8 @@
 #[cfg(unix)]
 mod capture;
 #[cfg(unix)]
+mod compositor;
+#[cfg(unix)]
 mod debug;
 #[cfg(unix)]
 mod osc133;
@@ -10,11 +12,15 @@ mod pty_proxy;
 mod runtime;
 #[cfg(unix)]
 mod screen;
+#[cfg(unix)]
+mod suggest;
 
 #[cfg(unix)]
 pub use capture::{CommandCapture, CommandCaptureSink};
 #[cfg(unix)]
 pub use pty_proxy::{PtyProxy, Shell, init_script};
+#[cfg(unix)]
+pub use suggest::SuggestionProvider;
 
 #[cfg(not(unix))]
 #[allow(dead_code)]

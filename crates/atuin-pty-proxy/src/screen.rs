@@ -1,39 +1,21 @@
 use std::io::Write;
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::{Arc, Mutex};
 
-pub(crate) enum Msg {
-    Data(Vec<u8>),
-    Resize { rows: u16, cols: u16 },
-    ScreenRequest(mpsc::Sender<Vec<u8>>),
-}
+use crate::compositor::Compositor;
 
 pub(crate) fn socket_path() -> PathBuf {
     let dir = std::env::temp_dir();
     dir.join(format!("atuin-pty-proxy-{}.sock", std::process::id()))
 }
 
-pub(crate) fn spawn_parser_thread(rows: u16, cols: u16, msg_rx: Receiver<Msg>) {
-    std::thread::spawn(move || {
-        let mut parser = vt100::Parser::new(rows, cols, 0);
-
-        loop {
-            let first = match msg_rx.recv() {
-                Ok(msg) => msg,
-                Err(_) => break,
-            };
-
-            handle_parser_msg(&mut parser, first);
-
-            while let Ok(msg) = msg_rx.try_recv() {
-                handle_parser_msg(&mut parser, msg);
-            }
-        }
-    });
-}
-
-pub(crate) fn spawn_socket_server(sock_path: PathBuf, screen_tx: SyncSender<Msg>) {
+/// Serve screen snapshots to local clients (e.g. `atuin search`, which uses
+/// them to restore the screen area its popup covered).
+pub(crate) fn spawn_socket_server<W: Write + Send + 'static>(
+    sock_path: PathBuf,
+    compositor: Arc<Mutex<Compositor<W>>>,
+) {
     std::thread::spawn(move || {
         let listener = match UnixListener::bind(&sock_path) {
             Ok(l) => l,
@@ -49,14 +31,12 @@ pub(crate) fn spawn_socket_server(sock_path: PathBuf, screen_tx: SyncSender<Msg>
                 Err(_) => break,
             };
 
-            let (reply_tx, reply_rx) = mpsc::channel();
-            if screen_tx.send(Msg::ScreenRequest(reply_tx)).is_err() {
-                break;
-            }
-            if let Ok(data) = reply_rx.recv() {
-                let _ = stream.write_all(&data);
-                let _ = stream.flush();
-            }
+            let data = match compositor.lock() {
+                Ok(compositor) => encode_screen(compositor.screen()),
+                Err(_) => break,
+            };
+            let _ = stream.write_all(&data);
+            let _ = stream.flush();
         }
     });
 }
@@ -73,8 +53,7 @@ pub(crate) fn spawn_socket_server(sock_path: PathBuf, screen_tx: SyncSender<Msg>
 /// Each row's bytes come from `screen.rows_formatted(0, cols)` and contain
 /// pre-built ANSI escape sequences. The client can write them directly to
 /// stdout without needing its own vt100 parser.
-fn encode_screen(parser: &vt100::Parser) -> Vec<u8> {
-    let screen = parser.screen();
+fn encode_screen(screen: &vt100::Screen) -> Vec<u8> {
     let (rows, cols) = screen.size();
     let (cursor_row, cursor_col) = screen.cursor_position();
 
@@ -93,12 +72,35 @@ fn encode_screen(parser: &vt100::Parser) -> Vec<u8> {
     buf
 }
 
-fn handle_parser_msg(parser: &mut vt100::Parser, msg: Msg) {
-    match msg {
-        Msg::Data(data) => parser.process(&data),
-        Msg::Resize { rows, cols } => parser.screen_mut().set_size(rows, cols),
-        Msg::ScreenRequest(reply_tx) => {
-            let _ = reply_tx.send(encode_screen(parser));
+#[cfg(test)]
+mod tests {
+    use super::encode_screen;
+
+    #[test]
+    fn encode_screen_wire_format_is_stable() {
+        let mut parser = vt100::Parser::new(3, 20, 0);
+        parser.process(b"hello");
+        let data = encode_screen(parser.screen());
+
+        assert_eq!(u16::from_be_bytes([data[0], data[1]]), 3);
+        assert_eq!(u16::from_be_bytes([data[2], data[3]]), 20);
+        assert_eq!(u16::from_be_bytes([data[4], data[5]]), 0);
+        assert_eq!(u16::from_be_bytes([data[6], data[7]]), 5);
+
+        // Three length-prefixed rows follow.
+        let mut offset = 8;
+        let mut rows = 0;
+        while offset + 4 <= data.len() {
+            let len = u32::from_be_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]) as usize;
+            offset += 4 + len;
+            rows += 1;
         }
+        assert_eq!(rows, 3);
+        assert_eq!(offset, data.len());
     }
 }

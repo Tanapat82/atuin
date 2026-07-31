@@ -552,7 +552,9 @@ dependencies = [
  "eyre",
  "portable-pty",
  "rstest",
+ "rustix",
  "signal-hook",
+ "unicode-width 0.2.2",
  "vt100",
 ]
 

@@ -1,15 +1,16 @@
-use std::io::{Read, Write};
-use std::sync::Arc;
+use std::io::Read;
+use std::io::Write;
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use crossterm::terminal;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 use crate::capture::CommandCaptureTracker;
+use crate::compositor::{Compositor, OverlayFlags};
 use crate::debug::{Osc133DebugHighlighter, RESET};
 use crate::pty_proxy::RuntimeOptions;
-use crate::screen::{self, Msg};
+use crate::screen;
 
 pub(crate) fn main(options: RuntimeOptions) {
     if let Err(e) = run(options) {
@@ -19,7 +20,7 @@ pub(crate) fn main(options: RuntimeOptions) {
     }
 }
 
-fn run(options: RuntimeOptions) -> eyre::Result<()> {
+fn run(mut options: RuntimeOptions) -> eyre::Result<()> {
     let (cols, rows) = terminal::size()?;
 
     let pty_system = native_pty_system();
@@ -73,17 +74,37 @@ fn run(options: RuntimeOptions) -> eyre::Result<()> {
         .take_writer()
         .map_err(|e| eyre::eyre!("{e:#}"))?;
 
-    let (msg_tx, msg_rx) = mpsc::sync_channel::<Msg>(64);
     let current_cols = Arc::new(AtomicU16::new(cols.max(1)));
 
-    screen::spawn_parser_thread(rows, cols, msg_rx);
-    screen::spawn_socket_server(sock_path.clone(), msg_tx.clone());
-    spawn_resize_handler(pair.master, msg_tx.clone(), current_cols.clone())?;
+    // Every byte written to the real terminal goes through the compositor,
+    // which also maintains the vt100 screen model served over the socket.
+    // Partial-sequence splitting is only needed when a suggestion overlay
+    // may interleave paints with pty output.
+    let flags = Arc::new(OverlayFlags::default());
+    let compositor = Arc::new(Mutex::new(Compositor::new(
+        rows,
+        cols,
+        std::io::stdout(),
+        flags.clone(),
+        options.suggestion_provider.is_some(),
+    )));
+
+    screen::spawn_socket_server(sock_path.clone(), compositor.clone());
+    spawn_resize_handler(pair.master, compositor.clone(), current_cols.clone())?;
+
+    let (mut input_tracker, key_filter) = match options.suggestion_provider.take() {
+        Some(provider) => {
+            let handles =
+                crate::suggest::spawn(provider, compositor.clone(), flags, current_cols.clone());
+            (Some(handles.tracker), Some(handles.keys))
+        }
+        None => (None, None),
+    };
 
     terminal::enable_raw_mode()?;
 
+    let pump_compositor = compositor.clone();
     let stdout_thread = std::thread::spawn(move || {
-        let mut stdout = std::io::stdout();
         let mut highlighter = options.debug_osc133.then(Osc133DebugHighlighter::new);
         let mut capture_tracker = options
             .command_capture_sink
@@ -102,28 +123,29 @@ fn run(options: RuntimeOptions) -> eyre::Result<()> {
                         tracker.push(&buf[..n], sink);
                     }
 
-                    if let Some(highlighter) = highlighter.as_mut() {
-                        let rendered = highlighter.render(&buf[..n]);
-                        let _ = msg_tx.try_send(Msg::Data(rendered.clone()));
-
-                        if stdout.write_all(&rendered).is_err() {
-                            break;
-                        }
-                    } else {
-                        let _ = msg_tx.try_send(Msg::Data(buf[..n].to_vec()));
-
-                        if stdout.write_all(&buf[..n]).is_err() {
-                            break;
+                    if let Ok(mut compositor) = pump_compositor.lock() {
+                        if let Some(highlighter) = highlighter.as_mut() {
+                            let rendered = highlighter.render(&buf[..n]);
+                            compositor.apply_pty(&rendered);
+                        } else {
+                            compositor.apply_pty(&buf[..n]);
                         }
                     }
-                    let _ = stdout.flush();
+
+                    // After the chunk is applied to screen and model alike,
+                    // so suggestion repaints see this chunk everywhere.
+                    if let Some(tracker) = input_tracker.as_mut() {
+                        tracker.push(&buf[..n]);
+                    }
                 }
             }
         }
 
-        if highlighter.is_some() {
-            let _ = stdout.write_all(RESET);
-            let _ = stdout.flush();
+        if let Ok(mut compositor) = pump_compositor.lock() {
+            compositor.flush_pending();
+            if highlighter.is_some() {
+                compositor.apply_pty(RESET);
+            }
         }
     });
 
@@ -134,7 +156,18 @@ fn run(options: RuntimeOptions) -> eyre::Result<()> {
             match stdin.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    if pty_writer.write_all(&buf[..n]).is_err() {
+                    let forwarded = match key_filter.as_ref() {
+                        Some(filter) => {
+                            let out = filter.process(&buf[..n], &mut stdin);
+                            if out.is_empty() {
+                                Ok(())
+                            } else {
+                                pty_writer.write_all(&out)
+                            }
+                        }
+                        None => pty_writer.write_all(&buf[..n]),
+                    };
+                    if forwarded.is_err() {
                         break;
                     }
                 }
@@ -153,7 +186,7 @@ fn run(options: RuntimeOptions) -> eyre::Result<()> {
 
 fn spawn_resize_handler(
     master: Box<dyn portable_pty::MasterPty + Send>,
-    resize_tx: mpsc::SyncSender<Msg>,
+    compositor: Arc<Mutex<Compositor<std::io::Stdout>>>,
     current_cols: Arc<AtomicU16>,
 ) -> eyre::Result<()> {
     use signal_hook::consts::SIGWINCH;
@@ -171,7 +204,9 @@ fn spawn_resize_handler(
                     pixel_width: 0,
                     pixel_height: 0,
                 });
-                let _ = resize_tx.try_send(Msg::Resize { rows, cols });
+                if let Ok(mut compositor) = compositor.lock() {
+                    compositor.resize(rows, cols);
+                }
             }
         }
     });
